@@ -145,6 +145,19 @@ export const mergeInputAndConfig = (params: {
     categories,
   }
 
+  // Apply calver defaults
+  if (
+    parsedConfig.versioning === 'calver' &&
+    parsedConfig['version-template'] === '$MAJOR.$MINOR.$PATCH$PRERELEASE'
+  ) {
+    parsedConfig['version-template'] = '$CALDATE.$PATCH'
+  }
+  if (parsedConfig.versioning === 'calver' && parsedConfig['filter-by-range']) {
+    core.warning(
+      "'filter-by-range' uses semver comparison and is not compatible with calver versioning. It will be ignored.",
+    )
+  }
+
   // Throw some more validation errors
   if (!parsedConfig.commitish) {
     throw new Error(

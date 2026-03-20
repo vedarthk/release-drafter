@@ -117,6 +117,7 @@ You can configure Release Drafter using the following key in your
 | `name-template`            | Optional | The template for the name of the draft release. For example: `"v$NEXT_PATCH_VERSION"`.                                                                                                                |
 | `tag-template`             | Optional | The template for the tag of the draft release. For example: `"v$NEXT_PATCH_VERSION"`.                                                                                                                 |
 | `tag-prefix`               | Optional | A known prefix used to filter release tags. For matching tags, this prefix is stripped before attempting to parse the version. Default: `""`                                                          |
+| `versioning`               | Optional | The versioning scheme to use. `semver` (default) uses semantic versioning, `calver` uses calendar versioning in `YYYYMMDD.patch` format. Refer to [Calendar Versioning](#calendar-versioning).        |
 | `version-template`         | Optional | The template to use when calculating the next version number for the release. Useful for projects that don't use semantic versioning. Default: `"$MAJOR.$MINOR.$PATCH$PRERELEASE"`                    |
 | `change-template`          | Optional | The template to use for each merged pull request. Use [change template variables](#change-template-variables) to insert values. Default: `"* $TITLE (#$NUMBER) @$AUTHOR"`.                            |
 | `change-title-escapes`     | Optional | Characters to escape in `$TITLE` when inserting into `change-template` so that they are not interpreted as Markdown format characters. Default: `""`                                                  |
@@ -202,12 +203,13 @@ components:
 You can use any of the following variables in `version-template` to format the
 [Next Version Variables](#next-version-variables):
 
-| Variable      | Description                                                     |
-| ------------- | --------------------------------------------------------------- |
-| `$PATCH`      | The patch version number.                                       |
-| `$MINOR`      | The minor version number.                                       |
-| `$MAJOR`      | The major version number.                                       |
-| `$PRERELEASE` | The prerelease suffix (for example `-rc.0`) or an empty string. |
+| Variable      | Description                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `$PATCH`      | The patch version number.                                                                |
+| `$MINOR`      | The minor version number.                                                                |
+| `$MAJOR`      | The major version number.                                                                |
+| `$PRERELEASE` | The prerelease suffix (for example `-rc.0`) or an empty string.                          |
+| `$CALDATE`    | The calendar date in `YYYYMMDD` format. Only available when `versioning` is set to `calver`. |
 
 You may want to use this when producing non semver output.
 
@@ -508,6 +510,9 @@ from the standard workflow depicted above.
 
 ## Projects that don't use Semantic Versioning
 
+If your project uses [Calendar Versioning](https://calver.org), see
+[Calendar Versioning](#calendar-versioning) for built-in support.
+
 If your project doesn't follow [Semantic Versioning](https://semver.org) you can
 still use Release Drafter, but you may want to set the `version-template` option
 to customize how the `$NEXT_{PATCH,MINOR,MAJOR}_VERSION` environment variables
@@ -516,6 +521,58 @@ are generated.
 For example, if your project doesn't use patch version numbers, you can set
 `version-template` to `$MAJOR.$MINOR`. If the current release is version 1.0,
 then `$NEXT_MINOR_VERSION` will be `1.1`.
+
+## Calendar Versioning
+
+If your project uses [Calendar Versioning](https://calver.org) instead of
+Semantic Versioning, you can opt in with the `versioning` option:
+
+```yml
+versioning: calver
+```
+
+This produces versions in `YYYYMMDD.patch` format (e.g., `20260320.1`). The date
+is the current date when the action runs. The patch number starts at `1` and
+increments for each subsequent same-day release. When a new day begins, the
+patch resets to `1`.
+
+When `versioning` is set to `calver`:
+
+- The default `version-template` is automatically set to `$CALDATE.$PATCH`
+  (unless you've provided a custom one).
+- The `version-resolver` config is kept but ignored — version increments are
+  determined by the date, not by labels.
+- The `$CALDATE` variable becomes available in `version-template`,
+  `name-template`, `tag-template`, and `template`.
+- The `$NEXT_MAJOR_VERSION`, `$NEXT_MINOR_VERSION`, and related semver variables
+  will be empty.
+- `filter-by-range` is not compatible with calver (it uses `semver.satisfies()`)
+  and will produce a warning if set.
+
+### CalVer Example
+
+```yml
+versioning: calver
+name-template: '$RESOLVED_VERSION'
+tag-template: '$RESOLVED_VERSION'
+template: |
+  ## What's Changed
+
+  $CHANGES
+```
+
+If the last release was `20260320.2` and the action runs on March 20, 2026, the
+next version will be `20260320.3`. If it runs on March 21, the version will be
+`20260321.1`.
+
+You can also customize the `version-template` for calver:
+
+```yml
+versioning: calver
+version-template: 'cal-$CALDATE-p$PATCH'
+```
+
+This would produce versions like `cal-20260320-p1`.
 
 ## Action Inputs
 
@@ -556,10 +613,10 @@ inputs to other Actions in the workflow
 | `body`             | The body of the drafted release, useful if it needs to be included in files.                                                                                                                                                  |
 | `html_url`         | The URL users can navigate to in order to view the release. i.e. `https://github.com/octocat/Hello-World/releases/v1.0.0`.                                                                                                    |
 | `upload_url`       | The URL for uploading assets to the release, which could be used by GitHub Actions for additional uses, for example the [`@actions/upload-release-asset GitHub Action`](https://www.github.com/actions/upload-release-asset). |
-| `resolved_version` | Version resolved by [Version Resolver](#version-resolver). i.e. `6.3.1`                                                                                                                                                       |
-| `major_version`    | Major part of resolved version by [Version Resolver](#version-resolver). i.e. `6` for version `6.3.1`                                                                                                                         |
-| `minor_version`    | Minor part of resolved version by [Version Resolver](#version-resolver). i.e. `3` for version `6.3.1`                                                                                                                         |
-| `patch_version`    | Patch part of resolved version by [Version Resolver](#version-resolver). i.e. `1` for version `6.3.1`                                                                                                                         |
+| `resolved_version` | Version resolved by [Version Resolver](#version-resolver). i.e. `6.3.1`. For [calver](#calendar-versioning): `20260320.1`.                                                                                                    |
+| `major_version`    | Major part of resolved version by [Version Resolver](#version-resolver). i.e. `6` for version `6.3.1`. Not set for [calver](#calendar-versioning).                                                                             |
+| `minor_version`    | Minor part of resolved version by [Version Resolver](#version-resolver). i.e. `3` for version `6.3.1`. Not set for [calver](#calendar-versioning).                                                                             |
+| `patch_version`    | Patch part of resolved version by [Version Resolver](#version-resolver). i.e. `1` for version `6.3.1`. For [calver](#calendar-versioning): the patch number (e.g. `1`).                                                       |
 
 ## Contributing
 

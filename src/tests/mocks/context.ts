@@ -100,9 +100,11 @@ export const mockContext = async (desiredPayload: AllowedPayload) => {
       ? 'pull_request'
       : 'push',
     GITHUB_EVENT_PATH: pathToPayload,
-    GITHUB_REF: payload.ref,
-    GITHUB_REF_NAME: desiredPayload.startsWith('pull_request')
+    GITHUB_REF: desiredPayload.startsWith('pull_request')
       ? `refs/pull/${payload.number}/merge`
+      : payload.ref,
+    GITHUB_REF_NAME: desiredPayload.startsWith('pull_request')
+      ? `${payload.number}/merge`
       : payload.ref.replace(/^refs\/heads\//, ''),
     GITHUB_REF_TYPE: desiredPayload === 'push-tag' ? 'tag' : 'branch',
     GITHUB_REPOSITORY: payload.repository?.full_name,

@@ -149,7 +149,10 @@ export const buildReleasePayload = (params: {
    * those here. If it doesn't but is still a tag - it must have been set
    * explicitly by the user, so it's fair to just let the API respond with an error.
    */
-  if (mutableCommitish.startsWith('refs/tags/')) {
+  if (
+    mutableCommitish.startsWith('refs/tags/') ||
+    mutableCommitish.startsWith('refs/pull/')
+  ) {
     core.info(
       `${mutableCommitish} is not supported as release target, falling back to default branch`,
     )

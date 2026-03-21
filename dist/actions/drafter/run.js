@@ -1479,7 +1479,7 @@ var CalendarVersionDescriptor = class {
 		const today = formatDate(opt?.now ?? /* @__PURE__ */ new Date());
 		const tagFromTagName = this._stripTag(lastRelease?.tag_name, opt?.tagPrefix);
 		const tagFromName = this._stripTag(lastRelease?.name, opt?.tagPrefix);
-		const match = tagFromTagName?.match(CALVER_PATTERN) || tagFromName?.match(CALVER_PATTERN) || null;
+		const match = tagFromTagName?.match(CALVER_PATTERN) || tagFromName?.match(CALVER_PATTERN) || this._stripNonDigitPrefix(lastRelease?.tag_name)?.match(CALVER_PATTERN) || this._stripNonDigitPrefix(lastRelease?.name)?.match(CALVER_PATTERN) || null;
 		if (match && match[1] === today) {
 			this.caldate = today;
 			this.patch = String(Number.parseInt(match[2], 10) + 1);
@@ -1493,6 +1493,10 @@ var CalendarVersionDescriptor = class {
 	_stripTag(input, tagPrefix) {
 		if (!input) return void 0;
 		return tagPrefix && input.startsWith(tagPrefix) ? input.slice(tagPrefix.length) : input;
+	}
+	_stripNonDigitPrefix(input) {
+		if (!input) return void 0;
+		return input.replace(/^[^\d]+/, "");
 	}
 	rendered(template) {
 		return renderTemplate({

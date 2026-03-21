@@ -65,6 +65,17 @@ describe('CalendarVersionDescriptor', () => {
     expect(descriptor.rendered('cal-$CALDATE-p$PATCH')).toBe('cal-20260320-p2')
   })
 
+  it('increments patch when tag has prefix but tag-prefix is not configured', () => {
+    const descriptor = new CalendarVersionDescriptor(
+      { tag_name: 'v20260320.4', name: 'Release' },
+      { now },
+    )
+
+    expect(descriptor.caldate).toBe('20260320')
+    expect(descriptor.patch).toBe('5')
+    expect(descriptor.resolvedVersion).toBe('20260320.5')
+  })
+
   it('starts at patch 1 when previous release tag is not calver format', () => {
     const descriptor = new CalendarVersionDescriptor(
       { tag_name: 'v1.2.3', name: 'Some release' },

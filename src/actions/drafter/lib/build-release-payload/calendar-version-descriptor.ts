@@ -38,6 +38,8 @@ export class CalendarVersionDescriptor {
     const match =
       tagFromTagName?.match(CALVER_PATTERN) ||
       tagFromName?.match(CALVER_PATTERN) ||
+      this._stripNonDigitPrefix(lastRelease?.tag_name)?.match(CALVER_PATTERN) ||
+      this._stripNonDigitPrefix(lastRelease?.name)?.match(CALVER_PATTERN) ||
       null
 
     if (match && match[1] === today) {
@@ -65,6 +67,13 @@ export class CalendarVersionDescriptor {
     return tagPrefix && input.startsWith(tagPrefix)
       ? input.slice(tagPrefix.length)
       : input
+  }
+
+  private _stripNonDigitPrefix(
+    input: string | null | undefined,
+  ): string | undefined {
+    if (!input) return undefined
+    return input.replace(/^[^\d]+/, '')
   }
 
   public rendered(template: string) {

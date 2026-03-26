@@ -5,6 +5,7 @@ import type { findPreviousReleases } from '../find-previous-releases'
 import type { findPullRequests } from '../find-pull-requests'
 import { generateChangeLog } from './generate-changelog'
 import { generateContributorsSentence } from './generate-contributors-sentence'
+import { getCalverVersionInfo } from './get-calver-version-info'
 import { getVersionInfo } from './get-version-info'
 import { renderTemplate } from './render-template'
 import { resolveVersionKeyIncrement } from './resolve-version-increment'
@@ -43,6 +44,7 @@ export const buildReleasePayload = (params: {
     | 'name-template'
     | 'commitish'
     | 'latest'
+    | 'versioning'
   >
   input: ExclusiveInput
   lastRelease: Awaited<ReturnType<typeof findPreviousReleases>>['lastRelease']
@@ -75,17 +77,29 @@ export const buildReleasePayload = (params: {
     replacers: config.replacers,
   })
 
-  const versionKeyIncrement = resolveVersionKeyIncrement({
-    pullRequests,
-    config,
-  })
+  let versionInfo:
+    | ReturnType<typeof getVersionInfo>
+    | ReturnType<typeof getCalverVersionInfo>
 
-  const versionInfo = getVersionInfo({
-    lastRelease,
-    config,
-    input,
-    versionKeyIncrement,
-  })
+  if (config.versioning === 'calver') {
+    versionInfo = getCalverVersionInfo({
+      lastRelease,
+      config,
+      input,
+    })
+  } else {
+    const versionKeyIncrement = resolveVersionKeyIncrement({
+      pullRequests,
+      config,
+    })
+
+    versionInfo = getVersionInfo({
+      lastRelease,
+      config,
+      input,
+      versionKeyIncrement,
+    })
+  }
 
   core.debug(`versionInfo: ${JSON.stringify(versionInfo, null, 2)}`)
 
@@ -135,7 +149,10 @@ export const buildReleasePayload = (params: {
    * those here. If it doesn't but is still a tag - it must have been set
    * explicitly by the user, so it's fair to just let the API respond with an error.
    */
-  if (mutableCommitish.startsWith('refs/tags/')) {
+  if (
+    mutableCommitish.startsWith('refs/tags/') ||
+    mutableCommitish.startsWith('refs/pull/')
+  ) {
     core.info(
       `${mutableCommitish} is not supported as release target, falling back to default branch`,
     )

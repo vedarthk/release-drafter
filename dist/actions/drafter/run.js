@@ -98,6 +98,7 @@ var exclusiveConfigSchema = object({
 		default: "patch"
 	}),
 	"category-template": string().optional().default("## $TITLE"),
+	versioning: _enum(["semver", "calver"]).optional().default("semver"),
 	template: string().optional().default("")
 }).meta({
 	title: "JSON schema for Release Drafter yaml files",
@@ -984,6 +985,8 @@ var mergeInputAndConfig = (params) => {
 		replacers,
 		categories
 	};
+	if (parsedConfig.versioning === "calver" && parsedConfig["version-template"] === "$MAJOR.$MINOR.$PATCH$PRERELEASE") parsedConfig["version-template"] = "$CALDATE.$PATCH";
+	if (parsedConfig.versioning === "calver" && parsedConfig["filter-by-range"]) warning("'filter-by-range' uses semver comparison and is not compatible with calver versioning. It will be ignored.");
 	if (!parsedConfig.commitish) throw new Error("'commitish' is required. Please set 'commitish' to a valid value. (defaults to the current ref, but it seems to be undefined in this context)");
 	if (parsedConfig.categories.filter((category) => category.labels.length === 0).length > 1) throw new Error("Multiple categories detected with no labels. Only one category with no labels is supported for uncategorized pull requests.");
 	if (parsedConfig["filter-by-range"] && !(0, import_valid.default)(parsedConfig["filter-by-range"])) throw new Error(`'filter-by-range' value "${parsedConfig["filter-by-range"]}" could not be parsed as a valid semver range.`);
@@ -1463,6 +1466,103 @@ var generateContributorsSentence = (params) => {
 	else return config["no-contributors-template"];
 };
 //#endregion
+//#region src/actions/drafter/lib/build-release-payload/calendar-version-descriptor.ts
+var CALVER_PATTERN = /^(\d{8})\.(\d+)$/;
+var formatDate = (date) => {
+	return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+};
+var CalendarVersionDescriptor = class {
+	caldate;
+	patch;
+	resolvedVersion;
+	constructor(lastRelease, opt) {
+		const today = formatDate(opt?.now ?? /* @__PURE__ */ new Date());
+		const tagFromTagName = this._stripTag(lastRelease?.tag_name, opt?.tagPrefix);
+		const tagFromName = this._stripTag(lastRelease?.name, opt?.tagPrefix);
+		const match = tagFromTagName?.match(CALVER_PATTERN) || tagFromName?.match(CALVER_PATTERN) || this._stripNonDigitPrefix(lastRelease?.tag_name)?.match(CALVER_PATTERN) || this._stripNonDigitPrefix(lastRelease?.name)?.match(CALVER_PATTERN) || null;
+		if (match && match[1] === today) {
+			this.caldate = today;
+			this.patch = String(Number.parseInt(match[2], 10) + 1);
+		} else {
+			this.caldate = today;
+			this.patch = "1";
+		}
+		this.resolvedVersion = `${this.caldate}.${this.patch}`;
+		if (!match && lastRelease) info(`Previous release tag "${lastRelease.tag_name}" does not match calver format. Starting at ${this.resolvedVersion}.`);
+	}
+	_stripTag(input, tagPrefix) {
+		if (!input) return void 0;
+		return tagPrefix && input.startsWith(tagPrefix) ? input.slice(tagPrefix.length) : input;
+	}
+	_stripNonDigitPrefix(input) {
+		if (!input) return void 0;
+		return input.replace(/^[^\d]+/, "");
+	}
+	rendered(template) {
+		return renderTemplate({
+			template,
+			object: {
+				$CALDATE: this.caldate,
+				$PATCH: this.patch
+			}
+		});
+	}
+};
+//#endregion
+//#region src/actions/drafter/lib/build-release-payload/get-calver-version-info.ts
+var getCalverVersionInfo = (params) => {
+	const { lastRelease, config, input, now } = params;
+	const explicitVersion = input.version || input.tag || input.name;
+	if (explicitVersion) return {
+		$NEXT_MAJOR_VERSION: "",
+		$NEXT_MAJOR_VERSION_MAJOR: null,
+		$NEXT_MAJOR_VERSION_MINOR: null,
+		$NEXT_MAJOR_VERSION_PATCH: null,
+		$NEXT_MINOR_VERSION: "",
+		$NEXT_MINOR_VERSION_MAJOR: null,
+		$NEXT_MINOR_VERSION_MINOR: null,
+		$NEXT_MINOR_VERSION_PATCH: null,
+		$NEXT_PATCH_VERSION: "",
+		$NEXT_PATCH_VERSION_MAJOR: null,
+		$NEXT_PATCH_VERSION_MINOR: null,
+		$NEXT_PATCH_VERSION_PATCH: null,
+		$NEXT_PRERELEASE_VERSION: "",
+		$NEXT_PRERELEASE_VERSION_PRERELEASE: null,
+		$RESOLVED_VERSION: explicitVersion,
+		$RESOLVED_VERSION_MAJOR: null,
+		$RESOLVED_VERSION_MINOR: null,
+		$RESOLVED_VERSION_PATCH: null,
+		$RESOLVED_VERSION_PRERELEASE: null,
+		$CALDATE: null
+	};
+	const descriptor = new CalendarVersionDescriptor(lastRelease, {
+		tagPrefix: config["tag-prefix"],
+		now
+	});
+	return {
+		$NEXT_MAJOR_VERSION: "",
+		$NEXT_MAJOR_VERSION_MAJOR: null,
+		$NEXT_MAJOR_VERSION_MINOR: null,
+		$NEXT_MAJOR_VERSION_PATCH: null,
+		$NEXT_MINOR_VERSION: "",
+		$NEXT_MINOR_VERSION_MAJOR: null,
+		$NEXT_MINOR_VERSION_MINOR: null,
+		$NEXT_MINOR_VERSION_PATCH: null,
+		$NEXT_PATCH_VERSION: "",
+		$NEXT_PATCH_VERSION_MAJOR: null,
+		$NEXT_PATCH_VERSION_MINOR: null,
+		$NEXT_PATCH_VERSION_PATCH: null,
+		$NEXT_PRERELEASE_VERSION: "",
+		$NEXT_PRERELEASE_VERSION_PRERELEASE: null,
+		$RESOLVED_VERSION: descriptor.rendered(config["version-template"]),
+		$RESOLVED_VERSION_MAJOR: null,
+		$RESOLVED_VERSION_MINOR: null,
+		$RESOLVED_VERSION_PATCH: descriptor.patch,
+		$RESOLVED_VERSION_PRERELEASE: null,
+		$CALDATE: descriptor.caldate
+	};
+};
+//#endregion
 //#region node_modules/semver/functions/parse.js
 var require_parse = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	var SemVer = require_semver();
@@ -1768,7 +1868,13 @@ var buildReleasePayload = (params) => {
 		},
 		replacers: config.replacers
 	});
-	const versionInfo = getVersionInfo({
+	let versionInfo;
+	if (config.versioning === "calver") versionInfo = getCalverVersionInfo({
+		lastRelease,
+		config,
+		input
+	});
+	else versionInfo = getVersionInfo({
 		lastRelease,
 		config,
 		input,
@@ -1809,7 +1915,7 @@ var buildReleasePayload = (params) => {
 	* those here. If it doesn't but is still a tag - it must have been set
 	* explicitly by the user, so it's fair to just let the API respond with an error.
 	*/
-	if (mutableCommitish.startsWith("refs/tags/")) {
+	if (mutableCommitish.startsWith("refs/tags/") || mutableCommitish.startsWith("refs/pull/")) {
 		info(`${mutableCommitish} is not supported as release target, falling back to default branch`);
 		mutableCommitish = "";
 	}

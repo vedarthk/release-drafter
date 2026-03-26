@@ -215,6 +215,11 @@
       "default": "## $TITLE",
       "type": "string"
     },
+    "versioning": {
+      "default": "semver",
+      "type": "string",
+      "enum": ["semver", "calver"]
+    },
     "template": {
       "default": "",
       "type": "string"

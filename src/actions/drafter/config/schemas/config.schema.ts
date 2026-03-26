@@ -143,6 +143,11 @@ export const exclusiveConfigSchema = object({
    */
   'category-template': string().optional().default('## $TITLE'),
   /**
+   * The versioning scheme to use. `semver` (default) uses semantic versioning,
+   * `calver` uses calendar versioning in `YYYYMMDD.patch` format.
+   */
+  versioning: zenum(['semver', 'calver']).optional().default('semver'),
+  /**
    * The template for the body of the draft release.
    * Optional as it may be inherited via `_extends`.
    */

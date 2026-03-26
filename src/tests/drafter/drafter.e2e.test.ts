@@ -126,6 +126,47 @@ describe('drafter e2e', () => {
       })
     })
 
+    describe('on a pull_request event', () => {
+      const repo = { owner: 'release-drafter', repo: 'release-drafter' }
+
+      it('clears refs/pull/ commitish and falls back to default branch', async () => {
+        await mockContext('pull_request-synchronize')
+        mocks.config.mockReturnValue('config')
+
+        const gqlScope = mockGraphqlQuery({
+          payload: 'graphql-commits-no-prs',
+        })
+
+        const scope = nockGetAndPostReleases({
+          fetchedReleases: ['release'],
+          repo,
+        })
+
+        await runDrafter()
+
+        expect(mocks.postReleaseBody.mock.lastCall).toMatchInlineSnapshot(`
+          [
+            {
+              "body": "# What's Changed
+
+          * No changes
+          ",
+              "draft": true,
+              "make_latest": "true",
+              "name": "",
+              "prerelease": false,
+              "tag_name": "",
+              "target_commitish": "",
+            },
+          ]
+        `)
+
+        expect(scope.pendingMocks().length).toBe(0)
+        expect(gqlScope.pendingMocks().length).toBe(0)
+        expect(mocks.core.setFailed).not.toHaveBeenCalled()
+      })
+    })
+
     describe('with no past releases', () => {
       it('sets $CHANGES based on all commits, and $PREVIOUS_TAG to blank', async () => {
         await mockContext('push')
